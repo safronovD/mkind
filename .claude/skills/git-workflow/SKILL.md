@@ -22,10 +22,10 @@ You **MUST** consider the user input before proceeding (if not empty). It is the
 1. **No direct merges to `main`.** Every change lands via a pull request. Never `git push origin <branch>:main`, never `git merge` into a local `main` that gets pushed, never use admin/force-merge to bypass review.
 2. **One GitHub issue per PR.** Every PR MUST reference an issue (create one first if none exists). The PR body MUST include a closing keyword (`Closes #<ISSUE-ID>`) so the issue auto-closes on merge.
 3. **Branch naming**: `usr/<git-user>/<ISSUE-ID>-<short-description>`
-   - `<git-user>`: `git config user.name`, lowercased, spaces → hyphens, stripped of any character outside `[a-z0-9-]`. Fall back to the local part of `git config user.email` if `user.name` is unset.
+   - `<git-user>`: the authenticated GitHub login, exactly as GitHub reports it (case preserved) — `gh api user --jq .login` (or the account shown by `gh auth status`). Do **not** derive it from `git config user.name`/`user.email`; those are display names, not the GitHub handle, and will not match.
    - `<ISSUE-ID>`: the numeric GitHub issue number.
    - `<short-description>`: 3-6 words distilled from the change description, lowercased, hyphen-separated, no articles.
-   - Example: `usr/danil-safronov/42-fix-subnet-collision`
+   - Example: `usr/safronovD/42-fix-subnet-collision`
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ You **MUST** consider the user input before proceeding (if not empty). It is the
 
 ## Execution
 
-1. **Compute the git-user slug** per the Branch naming rule above.
+1. **Get the git-user slug**: `gh api user --jq .login` (this is the GitHub handle, e.g. `safronovD` — not a slugified display name).
 2. **Create the GitHub issue** (skip if the user supplied an existing issue number in `$ARGUMENTS`):
    `gh issue create --title "<concise title>" --body "<1-3 sentence description derived from the input>"`
    Capture the issue number from the output URL.
