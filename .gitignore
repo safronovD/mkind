@@ -30,3 +30,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# spec-kit local state: points at the feature dir the slash commands
+# currently operate on. Per-developer working state, not project source.
+.specify/feature.json
