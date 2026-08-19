@@ -2,7 +2,21 @@
 
 ## Vision
 
-mkind extends the [KinD (Kubernetes IN Docker)](https://github.com/kubernetes-sigs/kind) concept to span multiple bare-metal nodes or VMs. Where KinD runs all container "nodes" on a single host, mkind distributes them across a fleet of machines — giving you a realistic multi-host Kubernetes cluster while retaining the speed and simplicity of containerized nodes.
+mkind extends the [KinD (Kubernetes IN Docker)](https://github.com/kubernetes-sigs/kind) concept to span multiple **hosts** — bare-metal machines or VMs. Where KinD runs every containerized **k8s-node** on a single host, mkind distributes them across a fleet of hosts — giving you a realistic multi-host Kubernetes cluster while retaining the speed and simplicity of containerized k8s-nodes.
+
+## Terminology
+
+Two kinds of machine are in play, and "node" alone is ambiguous between them.
+This project never uses it bare where the meaning could be either:
+
+| Term | Means |
+|---|---|
+| **host** (or **host-node**) | A physical or virtual *machine* — bare metal or VM — reachable over SSH and running a container runtime. |
+| **k8s-node** (or **kubernetes-node**) | A *containerized Kubernetes node*: one container running kubelet, registered with the cluster as control-plane or worker. Several run on one host. |
+
+"control-plane node" and "worker node" always mean k8s-nodes. "k8s-node
+subnet" means the underlay addresses of k8s-node containers, never the hosts'
+own LAN addresses.
 
 **Example topology:**
 ```
@@ -27,9 +41,9 @@ This creates a gap: there is no tool that combines **KinD's containerized-node s
 | Requirement                                 | KinD | k3d | vind | kubeadm | k0s | **mkind** |
 |---------------------------------------------|------|-----|------|---------|-----|-----------|
 | Container-based K8s nodes (fast, ephemeral) | Yes  | Yes | Yes  | No      | No  | **Yes**   |
-| Multi-node cluster                          | Yes  | Yes | Yes  | Yes     | Yes | **Yes**   |
+| Multi-k8s-node cluster                      | Yes  | Yes | Yes  | Yes     | Yes | **Yes**   |
 | Distributed across multiple physical hosts  | No   | No  | Partial* | Yes | Yes | **Yes**   |
-| Lightweight / no VM required per node       | Yes  | Yes | Yes  | No      | Partial | **Yes** |
+| Lightweight / no VM required per k8s-node   | Yes  | Yes | Yes  | No      | Partial | **Yes** |
 | Uses kubeadm for bootstrap                  | Yes  | No  | No   | Yes     | No  | **Yes**   |
 | Simple CLI UX (create/delete cluster)       | Yes  | Yes | Yes  | No      | Partial | **Yes** |
 
@@ -45,7 +59,7 @@ This creates a gap: there is no tool that combines **KinD's containerized-node s
 ### vind (loft-sh/vind)
 - **What it does:** KinD alternative built on vCluster. Supports "Hybrid Nodes" — joining external cloud VMs via Tailscale VPN.
 - **Limitation:** External nodes are real OS installs (not containerized). Requires vCluster Platform for VPN coordination. Different architecture from KinD.
-- **Relevance:** Closest to mkind's vision, but fundamentally different approach (vCluster vs kubeadm, real nodes vs container nodes).
+- **Relevance:** Closest to mkind's vision, but fundamentally different approach (vCluster vs kubeadm, real OS-level nodes vs containerized k8s-nodes).
 
 ### k3d
 - **What it does:** Runs k3s nodes as Docker containers. Similar concept to KinD but using k3s.
@@ -58,8 +72,8 @@ This creates a gap: there is no tool that combines **KinD's containerized-node s
 - **Relevance:** Historical predecessor. Shows the DIND approach works but was never extended to multi-host.
 
 ### kubeadm (direct)
-- **What it does:** The standard tool for bootstrapping multi-node K8s clusters on real machines.
-- **Limitation:** Requires full OS-level setup per node. Not containerized, not ephemeral.
+- **What it does:** The standard tool for bootstrapping multi-host K8s clusters on real machines.
+- **Limitation:** Requires full OS-level setup per host. Not containerized, not ephemeral.
 - **Relevance:** mkind uses kubeadm internally (via kind node images) but wraps it in containers.
 
 ### k0s
@@ -76,18 +90,18 @@ simpler than initially expected.
 
 kindnetd is intentionally minimal. It does exactly two things:
 
-1. **Adds static routes for pod CIDRs** — For each other node in the cluster,
+1. **Adds static routes for pod CIDRs** — For each other k8s-node in the cluster,
    it runs the equivalent of `ip route add <podCIDR> via <nodeInternalIP>`.
-   This is how pod-to-pod traffic crosses nodes.
+   This is how pod-to-pod traffic crosses k8s-nodes.
 
-2. **Writes a CNI config using the `ptp` plugin** — Each node gets a
+2. **Writes a CNI config using the `ptp` plugin** — Each k8s-node gets a
    `10-kindnet.conflist` that uses `host-local` IPAM to assign pod IPs from
-   that node's PodCIDR slice.
+   that k8s-node's PodCIDR slice.
 
 That's it. No VXLAN, no tunneling, no encapsulation. The **only assumption**
 kindnetd makes is:
 
-> **Every node's `InternalIP` is directly routable from every other node.**
+> **Every k8s-node's `InternalIP` is directly routable from every other k8s-node.**
 
 In standard KinD this is trivially true — all containers sit on the same Docker
 bridge. For mkind, if we make the kind-node container IPs routable across
@@ -100,7 +114,7 @@ masquerading) without any modification.
 +-----------------------------------------------------------------+
 |                    What mkind must solve                         |
 |                                                                 |
-|   Node Underlay: make kind-node container IPs routable          |
+|   K8s-Node Underlay: make k8s-node container IPs routable       |
 |   across physical hosts (the Docker bridge gap)                 |
 +-----------------------------------------------------------------+
         |
@@ -108,8 +122,8 @@ masquerading) without any modification.
 +-----------------------------------------------------------------+
 |                    What kindnetd solves for free                 |
 |                                                                 |
-|   Pod Overlay: static routes between nodes for pod CIDRs        |
-|   CNI Config: ptp plugin + host-local IPAM per node             |
+|   Pod Overlay: static routes between k8s-nodes for pod CIDRs    |
+|   CNI Config: ptp plugin + host-local IPAM per k8s-node         |
 |   Masquerading: iptables rules for pod-to-external traffic      |
 +-----------------------------------------------------------------+
         |
@@ -118,7 +132,7 @@ masquerading) without any modification.
 |                    What kube-proxy solves for free               |
 |                                                                 |
 |   Service Networking: ClusterIP/NodePort via iptables/IPVS      |
-|   (local to each node, no cross-host routing needed)            |
+|   (local to each k8s-node, no cross-host routing needed)        |
 +-----------------------------------------------------------------+
 ```
 
@@ -303,8 +317,8 @@ mkind agent install --host 192.168.1.10 --user ubuntu
 - [ ] SSH-based agent that can run kind node containers on a remote host
 - [ ] Single control-plane creation across 2 hosts
 
-### Phase 2 — Multi-Node
+### Phase 2 — Multiple K8s-Nodes
 - [ ] HA control plane (3 or 5 CP nodes, all co-located on a single host)
 - [ ] Worker node join across hosts
-- [ ] Cross-host node underlay with Docker bridge + static routes (kindnetd handles pod routing)
+- [ ] Cross-host k8s-node underlay with Docker bridge + static routes (kindnetd handles pod routing)
 - [ ] Image preloading across hosts
