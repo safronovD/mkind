@@ -234,6 +234,14 @@ spec:
     # Handled locally by kube-proxy (iptables/IPVS). Not routed on the wire.
     serviceSubnet: 10.96.0.0/12
   hosts:
+    # All control-plane nodes of a cluster live on ONE host, in odd
+    # counts (1, 3, 5). Keeping the etcd quorum on a single host's local
+    # bridge means cross-host latency and partitions can never corrupt
+    # it — the cross-host path only has to carry worker-to-control-plane
+    # and pod-to-pod traffic. The trade-off is explicit: this host is a
+    # single point of failure for the control plane. HA here buys
+    # production-like topology and control-plane process redundancy,
+    # not host-level fault tolerance.
     - address: 192.168.1.10
       user: ubuntu
       # Auto-allocated from nodeSubnet: 172.18.1.0/24
@@ -296,7 +304,7 @@ mkind agent install --host 192.168.1.10 --user ubuntu
 - [ ] Single control-plane creation across 2 hosts
 
 ### Phase 2 — Multi-Node
-- [ ] HA control plane (3 CP nodes across hosts)
+- [ ] HA control plane (3 or 5 CP nodes, all co-located on a single host)
 - [ ] Worker node join across hosts
 - [ ] Cross-host node underlay with Docker bridge + static routes (kindnetd handles pod routing)
 - [ ] Image preloading across hosts
